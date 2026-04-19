@@ -2,69 +2,64 @@ pipeline {
     agent any
 
     stages {
-        stage('build'){
+
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Build') {
             agent {
                 docker {
-                    image 'node:18-alpine'
-                    reuseNode true
+                    image 'node:18-bullseye'   // ⚠️ NE alpine!
+                    args '-u root:root'
                 }
             }
             steps {
                 sh '''
-                    ls -la
                     node --version
                     npm --version
                     npm ci
                     npm run build
-                    ls -la
                 '''
             }
         }
-        stage('Test'){
-            agent {
-                docker {
-                    image 'node:18-alpine'
-                    reuseNode true
-                }
-            }
-            steps{
-                sh '''
-                    test -f build/index.html
-                    npm test || true
-                    npx playwright install    
-                    npx playwright test || true
-                '''
-            }
 
-        }
-        stage('w/o docker') { 
-            steps { 
-                sh '''
-                    echo 'Hello World'
-                    echo 'bez kontejnera kreiranje file-a'
-                    ls -la
-                    touch container-no.txt
-                '''
-            } 
-        }
-        stage("w/ docker") {
+        stage('Test (Jest)') {
             agent {
                 docker {
-                    image 'node:18-alpine'
+                    image 'node:18-bullseye'
+                    args '-u root:root'
                 }
             }
             steps {
                 sh '''
-                    echo 'with docker'
-                    echo 'npm --version'
-                    touch container-yes.txt
+                    npm test -- --watchAll=false --testResultsProcessor=jest-junit
+                '''
+            }
+        }
+
+        stage('E2E (Playwright)') {
+            agent {
+                docker {
+                    image 'mcr.microsoft.com/playwright:v1.42.1-jammy' // ✅ ima sve browser-e
+                    args '--ipc=host'
+                }
+            }
+            steps {
+                sh '''
+                    npm ci
+                    npx playwright test
                 '''
             }
         }
     }
+
     post {
         always {
-            junit 'test-results/junit.xml'
+            junit '**/junit.xml'
+            archiveArtifacts artifacts: 'test-results/**', allowEmptyArchive: true
         }
     }
 }
