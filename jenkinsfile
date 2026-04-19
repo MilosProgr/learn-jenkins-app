@@ -2,7 +2,6 @@ pipeline {
     agent any
 
     stages {
-
         stage('Checkout') {
             steps {
                 checkout scm
@@ -12,17 +11,14 @@ pipeline {
         stage('Build') {
             agent {
                 docker {
-                    image 'node:18-bullseye'   // ⚠️ NE alpine!
-                    args '-u root:root'
+                    image 'node:18-bullseye'
                 }
             }
             steps {
-                sh '''
-                    node --version
-                    npm --version
-                    npm ci
-                    npm run build
-                '''
+                sh 'node --version'
+                sh 'npm --version'
+                sh 'npm ci'
+                sh 'npm run build'
             }
         }
 
@@ -30,36 +26,35 @@ pipeline {
             agent {
                 docker {
                     image 'node:18-bullseye'
-                    args '-u root:root'
                 }
             }
             steps {
-                sh '''
-                    npm test -- --watchAll=false --testResultsProcessor=jest-junit
-                '''
+                sh 'npm ci'
+                sh 'npm test -- --watchAll=false --testResultsProcessor=jest-junit'
             }
         }
 
         stage('E2E (Playwright)') {
+            when {
+                expression { fileExists('playwright.config.js') }
+            }
             agent {
                 docker {
-                    image 'mcr.microsoft.com/playwright:v1.42.1-jammy' // ✅ ima sve browser-e
-                    args '--ipc=host'
+                    image 'mcr.microsoft.com/playwright:v1.42.1-jammy'
                 }
             }
             steps {
-                sh '''
-                    npm ci
-                    npx playwright test
-                '''
+                sh 'npm ci'
+                sh 'npx playwright install'
+                sh 'npx playwright test'
             }
         }
     }
 
     post {
         always {
-            junit '**/junit.xml'
-            archiveArtifacts artifacts: 'test-results/**', allowEmptyArchive: true
+            junit 'reports/junit/*.xml'
+            archiveArtifacts artifacts: 'build/**', fingerprint: true
         }
     }
 }
